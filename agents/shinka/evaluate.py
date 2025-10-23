@@ -22,7 +22,7 @@ def write_val_perf(val_perf):
 
 def read_val_perf():
     if not os.path.isfile(f"{AGENT_DIR}/val_perf.txt"):
-        return 0
+        return -10
     content = open(f"{AGENT_DIR}/val_perf.txt", "r").read()
     return float(content)
 
@@ -40,10 +40,14 @@ def grade_validation(submission_val_path: str):
     ans_val_ds = pd.read_csv(ANS_VAL_PATH)
 
     competition = get_competition()
+    grader = competition.grader
     try:
         val_perf = competition.grader.grade_fn(submission_val_df, ans_val_ds)
     except Exception as e:
         return False, f"The following error occured in the grading function: {str(e)}"
+
+    if grader.is_lower_better():
+        val_perf *= -1
 
     write_val_perf(val_perf)
     return True, val_perf
@@ -145,6 +149,7 @@ def main(program_path: str, results_dir: str):
     def _aggregator_with_context(runs: List[Any]) -> Dict[str, Any]:
         return _aggregate_and_write_submission(runs, results_dir=results_dir)
 
+    # TODO: add time out?
     metrics, correct, error_msg = run_shinka_eval(
         program_path=program_path,
         results_dir=results_dir,

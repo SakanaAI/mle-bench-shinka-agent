@@ -3,16 +3,14 @@ vars:
   time_limit: &time_limit 86400 # 24 hrs
 
 defaults: &defaults
-  start: aide/start.sh
-  dockerfile: aide/Dockerfile
-  kwargs_type: omegaconf
+  start: shinka/start.sh
+  dockerfile: shinka/Dockerfile
+  kwargs_type: argparse
   env_vars: &env_vars
     TIME_LIMIT_SECS: *time_limit
     STEP_LIMIT: *step_count
 
 shinka:
   <<: *defaults
-  start: shinka/start.sh
-  dockerfile: shinka/Dockerfile
   env_vars:
     <<: *env_vars
