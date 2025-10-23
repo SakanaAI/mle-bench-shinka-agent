@@ -41,6 +41,13 @@ class Model:
         pass
 
     def make_submission(self, split: Literal["validation", "test"]):
+        """
+        Make a submission file for a given split.
+
+        Returns:
+            str: path to the submission file
+        """
+        submission_path = f"{RESULTS_DIR}/submission_{split}.csv"
         # An example code that submits the example submission
         # In practice, we should load the test file, make predictions, and save the predicions as the submission file
         # The submission file should follow the format described in the task description.
@@ -54,16 +61,16 @@ class Model:
             # data_test = self.load_data("test")
             # pred_test = self.predict(data_test)
             # formatted_submission_test = self.format_submission(data_test, pred_test)
-            # formatted_submission_test.to_csv(f"{RESULTS_DIR}/submission_{split}.csv", index=False)
+            # formatted_submission_test.to_csv(submission_path, index=False)
             raise NotImplementedError("Test submission not implemented yet.")
         elif split == "validation":
             # e.g., this could be something like
             # data_val = self.load_data("validation")
             # pred_val = self.predict(data_val)
             # formatted_submission_val = self.format_submission(data_val, pred_val)
-            # formatted_submission_val.to_csv(f"{RESULTS_DIR}/submission_{split}.csv", index=False)
+            # formatted_submission_val.to_csv(submission_path, index=False)
             raise NotImplementedError("Validation submission not implemented yet.")
-        return f"{RESULTS_DIR}/submission_{split}.csv"
+        return submission_path
 
     def prepare_data(self):
         # Load data based on the task description from DATA_DIR
@@ -107,18 +114,12 @@ def train_model(seed: int | None = None):
 
 
 def run_mle_bench(*args, **kwargs):
-    # from utils import cross_validation_split, find_label_col
-
-    # print("Start spliting data...")
-    # cross_validation_split(kwargs.get("seed"))
-    # agent_dir = os.environ.get("AGENT_DIR", "/home/agent/")
-    # train_data = pd.read_csv(f"{agent_dir}/train.csv")
-
-    # label_col = find_label_col()
-    # x_train = train_data.drop(columns=[label_col])
-    # y_train = train_data[label_col]
-    # print(f"Feature columns: {x_train.columns}")
-    # print(f"Label column: {label_col}")
+    import traceback
 
     print("Start training model...")
-    return train_model(kwargs.get("seed", None))
+    try:
+        return train_model(kwargs.get("seed", None))
+    except Exception:
+        raise RuntimeError(
+            f"train_model failed with the following error trace: {traceback.format_exc()}"
+        )

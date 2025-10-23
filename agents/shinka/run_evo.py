@@ -21,25 +21,34 @@ description_file = f"{DATA_DIR}/description.md"
 # if os.environ.get("OBFUSCATE", False):
 #     description_file = f"{DATA_DIR}/description_obfuscated.md"
 task_desc = open(description_file).read()
-print("##### TASK DESCRIPTION #####")
-print(task_desc)
-print("=" * 60)
 
 mle_bench_task_sys_msg = (
     """
 You are a Kaggle grandmaster, world-class machine learning engineer, and you are very good at building models and statistical methods.
-Now, you are participating in a Kaggle competition. In order to win this competition, you need refine the code block for better performance. Here is the problem statement:
+Now, you are participating in a Kaggle competition. In order to win this competition, you need refine the code block for better performance. Here is the problem statement.
+<problem_statement>
 
 {task_desc}
 
+<end_of_problem_statement>
+
+---
+
 Your goal is to improve the performance of the program by suggesting improvements.
+
+If you're given placeholder code, prioritize implementing the correct and functional data pipeline first, i.e., `make_submission`, `prepare_data`, `load_data` functions with a simple machine learning model. Once the code works (validated), focus more on improving the model performance.
 
 You will be given a set of performance metrics for the program.
 Your goal is to maximize the `combined_score` of the program.
 Try diverse approaches to solve the problem."""
 ).strip()
-
+# TODO: add obfuscate version
+# TODO: add additional notes with vars read from bash cmd (e.g., ls /home/data)
+# TODO: add more notes on lib version + hardware?
 mle_bench_task_sys_msg = mle_bench_task_sys_msg.format(task_desc=task_desc)
+print("##### SYSTEM MESSAGE #####")
+print(mle_bench_task_sys_msg)
+print("=" * 60)
 
 job_config = LocalJobConfig(eval_program_path=f"{AGENT_DIR}/evaluate.py")
 db_config = DatabaseConfig(
@@ -62,7 +71,7 @@ evo_config = EvolutionConfig(
     task_sys_msg=mle_bench_task_sys_msg,
     patch_types=["diff", "full", "cross"],
     patch_type_probs=[0.6, 0.3, 0.1],
-    num_generations=150,
+    num_generations=100,
     max_parallel_jobs=1,
     max_patch_resamples=3,
     max_patch_attempts=3,

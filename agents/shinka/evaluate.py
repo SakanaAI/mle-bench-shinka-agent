@@ -6,8 +6,18 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from mlebench.registry import registry
+
 from shinka.core import run_shinka_eval
 
+
+# we cant access the leaderboard from inside the docker
+# we manually checked and add each competition here
+IS_LOWER_BETTER = {
+    "spaceship-titanic": False,
+    "spooky-author-identification": True,
+    "nomad2018-predict-transparent-conductors": True,
+    "random-acts-of-pizza": False,
+}
 
 AGENT_DIR = os.environ.get("AGENT_DIR", "/home/agent")
 PRIVATE_DATA_DIR = "/private/data"
@@ -27,11 +37,6 @@ def read_val_perf():
     return float(content)
 
 
-def get_competition():
-    new_registry = registry.set_data_dir(Path(PRIVATE_DATA_DIR))
-    return new_registry.get_competition(COMPETITION_ID)
-
-
 def grade_validation(submission_val_path: str):
     if not os.path.isfile(ANS_VAL_PATH):
         return False, f"Validation answer file not found at: {ANS_VAL_PATH}"
@@ -39,14 +44,13 @@ def grade_validation(submission_val_path: str):
     submission_val_df = pd.read_csv(submission_val_path)
     ans_val_ds = pd.read_csv(ANS_VAL_PATH)
 
-    competition = get_competition()
-    grader = competition.grader
+    competition = registry.get_competition(COMPETITION_ID)
     try:
         val_perf = competition.grader.grade_fn(submission_val_df, ans_val_ds)
     except Exception as e:
         return False, f"The following error occured in the grading function: {str(e)}"
 
-    if grader.is_lower_better():
+    if IS_LOWER_BETTER[COMPETITION_ID]:
         val_perf *= -1
 
     write_val_perf(val_perf)
@@ -73,22 +77,24 @@ def validate_submission(model, split: str):
 
 def _validate_model(model) -> Tuple[bool, Optional[str]]:
     """Basic validation: the run result should be a model-like object."""
+    print("Validating trained model...")
     if model is None:
-        return False, "train_model returned None"
-    if not hasattr(model, "predict"):
-        return False, "train_model result has no predict(...) method"
+        return False, "train_model returns None"
     if not hasattr(model, "make_submission"):
         return False, "train_model result has no make_submission(...) method"
 
+    print("Validating submission (validation split)")
     is_passed, msg = validate_submission(model, "validation")
     if not is_passed:
         return is_passed, msg
     submission_val_path = msg
 
+    print("Validating submission (test split)")
     is_passed, msg = validate_submission(model, "test")
     if not is_passed:
         return is_passed, msg
 
+    print("Grading validation submission...")
     is_passed, msg = grade_validation(submission_val_path)
     if not is_passed:
         return is_passed, msg
@@ -108,20 +114,13 @@ def _aggregate_and_write_submission(
     Build a submission matching the sample_submission schema if available,
     and compute simple local metrics if a validation split exists.
     """
-    os.makedirs(results_dir, exist_ok=True)
-
+    print("Aggregating metrics...")
     model = results[0]
-    submission_test_path = model.make_submission("test")
-    print(f"Test submission saved to: {submission_test_path}")
-
-    public_metrics: Dict[str, Any] = {}
 
     metrics: Dict[str, Any] = {
         "combined_score": float(read_val_perf()),
-        "public": public_metrics,
-        "private": {
-            "submission_path": submission_test_path,
-        },
+        "public": {},
+        "private": {},
     }
 
     return metrics
