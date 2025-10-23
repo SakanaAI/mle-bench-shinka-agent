@@ -6,6 +6,7 @@ from typing import Literal
 import pandas as pd
 
 # NOTE: DATA_DIR is read-only, please write only either to AGENT_DIR or RESULTS_DIR
+# NOTE: COPYING answer from `validation_answer` IS NOT ALLOWED AND IS CONSIDERED CHEATING
 
 # these globals must not be changed
 DATA_DIR = os.environ.get("DATA_DIR")
@@ -43,24 +44,24 @@ class Model:
         # An example code that submits the example submission
         # In practice, we should load the test file, make predictions, and save the predicions as the submission file
         # The submission file should follow the format described in the task description.
-        # The submission file should be saved at {RESULTS_DIR}/submission.csv
+        # The submission file should be saved at {RESULTS_DIR}/submission_{split}.csv
         #
         # IMPORTANT: You should make sure that this function works as the model will be evaluated based on the submission file
         # Leaving the code as is will result in an error in the evaluation
-        # Cheating by copying labels from the validation data is not allowed
+        # Cheating by copying labels from existing validation answer is not allowed
         if split == "test":
-            cmd = f"cp {AGENT_DIR}/sample_submission.csv {RESULTS_DIR}/submission_test.csv"
-            os.system(cmd)
-            
             # e.g., this could be something like
             # data_test = self.load_data("test")
             # pred_test = self.predict(data_test)
-            # self.format_submission(data_test, pred_test)
+            # formatted_submission_test = self.format_submission(data_test, pred_test)
+            # formatted_submission_test.to_csv(f"{RESULTS_DIR}/submission_{split}.csv", index=False)
+            raise NotImplementedError("Test submission not implemented yet.")
         elif split == "validation":
             # e.g., this could be something like
             # data_val = self.load_data("validation")
             # pred_val = self.predict(data_val)
-            # self.format_submission(data_val, pred_val)
+            # formatted_submission_val = self.format_submission(data_val, pred_val)
+            # formatted_submission_val.to_csv(f"{RESULTS_DIR}/submission_{split}.csv", index=False)
             raise NotImplementedError("Validation submission not implemented yet.")
         return f"{RESULTS_DIR}/submission_{split}.csv"
 

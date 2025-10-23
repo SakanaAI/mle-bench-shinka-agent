@@ -62,7 +62,7 @@ evo_config = EvolutionConfig(
     task_sys_msg=mle_bench_task_sys_msg,
     patch_types=["diff", "full", "cross"],
     patch_type_probs=[0.6, 0.3, 0.1],
-    num_generations=100,
+    num_generations=150,
     max_parallel_jobs=1,
     max_patch_resamples=3,
     max_patch_attempts=3,
@@ -71,7 +71,7 @@ evo_config = EvolutionConfig(
     llm_models=[
         # "gemini-2.5-pro",
         "gemini-2.5-flash",
-        "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0",
+        # "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", # got `proxies` error
         "o4-mini",
         "gpt-5-mini",
         # "gpt-5",
