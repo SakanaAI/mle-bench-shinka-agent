@@ -5,6 +5,7 @@ from typing import Literal
 # NOTE: DATA_DIR is read-only, please write only either to AGENT_DIR or RESULTS_DIR
 # NOTE: COPYING answer from `validation_answer` IS NOT ALLOWED AND IS CONSIDERED CHEATING
 # NOTE: The training time is limited to *one hour*.
+# NOTE: The data exists in the DATA_DIR directory. Read the files from the directory. DO NOT BUILD A SYNTHETIC DATASET.
 
 # these globals must not be changed
 DATA_DIR = os.environ.get("DATA_DIR")
@@ -79,6 +80,7 @@ class Model:
         # You have to write code that handles the data for the current competition correctly.
         #
         # Do an 80/20 split seeded by self.seed on the training file to get the train and validation splits
+        # It is a good idea to try to split the data such that the label classes in the validation split are uniform, which might be different from the training distribution
         # You can write the train split wherever you want, but make sure that `self.load_data` can read it
         # Write the validation split into two files: {AGENT_DIR}/validation.csv and {AGENT_DIR}/validation_answer.csv
         # The answer file should have the same format as the submission example shown in the task description.

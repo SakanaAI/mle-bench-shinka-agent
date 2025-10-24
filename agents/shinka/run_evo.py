@@ -1,5 +1,6 @@
 import argparse
 import os
+from glob import glob
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -31,8 +32,10 @@ If you're given placeholder code, prioritize implementing the correct and functi
 When you use a data processing pipeline, make sure that the same pipeline is applied consistently across splits.
 Also, make sure to avoid data leakage in the data pipeline.
 
-Try to avoid using try-except statements.
+Avoid using try-except statements.
 If you know that a part of the code doesn't work, remove it instead of wrapping it with try-except statements.
+
+It is usually a good idea to handle class imbalance.
 
 The runtime is limited to one hour. Make sure that the code can be executed within one hour.
 
@@ -58,24 +61,29 @@ def main(args: argparse.Namespace) -> None:
     if debug:
         print("Debug mode enabled for Shinka evolution runner.")
 
-    agent_dir = os.environ.get("AGENT_DIR")
-    data_dir = os.environ.get("DATA_DIR")
+    AGENT_DIR = os.environ.get("AGENT_DIR")
+    DATA_DIR = os.environ.get("DATA_DIR")
 
-    if not agent_dir or not data_dir:
+    if not AGENT_DIR or not DATA_DIR:
         raise EnvironmentError(
             "Environment variables `AGENT_DIR` and `DATA_DIR` must be set."
         )
 
-    description_file = Path(data_dir) / "description.md"
+    description_file = Path(DATA_DIR) / "description.md"
     task_desc = description_file.read_text()
 
     # TODO: add additional notes with vars read from bash cmd (e.g., ls /home/data)
     mle_bench_task_sys_msg = TASK_SYS_MSG_TEMPLATE.format(task_desc=task_desc)
+    data_directory_files = f"{glob(f'{DATA_DIR}/*')=}"
+    if data_directory_files:
+        mle_bench_task_sys_msg += (
+            f"\n\nHere's the files listed in {{DATA_DIR}}: `{data_directory_files}`"
+        )
     print("##### SYSTEM MESSAGE #####")
     print(mle_bench_task_sys_msg)
     print("=" * 60)
 
-    job_config = LocalJobConfig(eval_program_path=f"{agent_dir}/evaluate.py")
+    job_config = LocalJobConfig(eval_program_path=f"{AGENT_DIR}/evaluate.py")
     db_config = DatabaseConfig(
         db_path="evolution_db.sqlite",
         num_islands=2,
@@ -121,8 +129,8 @@ def main(args: argparse.Namespace) -> None:
             temperatures=[0.0],
             max_tokens=32768,
         ),
-        init_program_path=f"{agent_dir}/initial.py",
-        results_dir=f"{agent_dir}/results_mle_bench",
+        init_program_path=f"{AGENT_DIR}/initial.py",
+        results_dir=f"{AGENT_DIR}/results_mle_bench",
         max_novelty_attempts=3,
         use_text_feedback=False,
         llm_dynamic_selection="ucb1",
