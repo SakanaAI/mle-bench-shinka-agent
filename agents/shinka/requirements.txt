@@ -1,4 +1,2 @@
-# git+https://github.com/SakanaAI/shinka
-# numpy
 git+https://github.com/SakanaAI/ShinkaEvolve
 git+https://github.com/openai/mle-bench.git

@@ -15,4 +15,4 @@ competition_name="${competition%.*}"
 echo "Running competition: ${1}"
 echo "-----------------------------------"
 # uv run run_agent.py --agent-id shinka --competition-set experiments/splits/spaceship-titanic.txt
-python run_agent.py --agent-id shinka --competition-set "experiments/splits/${1}.txt"
+python run_agent.py --agent-id shinka/debug --competition-set "experiments/splits/${1}.txt"

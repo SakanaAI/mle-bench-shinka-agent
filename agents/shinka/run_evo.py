@@ -1,3 +1,4 @@
+import argparse
 import os
 from pathlib import Path
 
@@ -12,24 +13,13 @@ env_path = Path(__file__).parent / ".env"
 
 load_dotenv(dotenv_path=env_path, override=True)
 
-print(os.environ.get("OPENAI_API_KEY"))
-
-AGENT_DIR = os.environ.get("AGENT_DIR")
-DATA_DIR = os.environ.get("DATA_DIR")
-
-description_file = f"{DATA_DIR}/description.md"
-# if os.environ.get("OBFUSCATE", False):
-#     description_file = f"{DATA_DIR}/description_obfuscated.md"
-task_desc = open(description_file).read()
-
-mle_bench_task_sys_msg = (
+TASK_SYS_MSG_TEMPLATE = (
     """
 You are a Kaggle grandmaster, world-class machine learning engineer, and you are very good at building models and statistical methods.
-Now, you are participating in a Kaggle competition. In order to win this competition, you need refine the code block for better performance. Here is the problem statement.
+Now, you are participating in a Kaggle competition. In order to win this competition, you need to refine the code block for better performance. Here is the problem statement.
 <problem_statement>
 
 {task_desc}
-
 <end_of_problem_statement>
 
 ---
@@ -38,91 +28,125 @@ Your goal is to improve the performance of the program by suggesting improvement
 
 If you're given placeholder code, prioritize implementing the correct and functional data pipeline first, i.e., `make_submission`, `prepare_data`, `load_data` functions with a simple machine learning model. Once the code works (validated), focus more on improving the model performance.
 
+When you use a data processing pipeline, make sure that the same pipeline is applied consistently across splits.
+Also, make sure to avoid data leakage in the data pipeline.
+
+Try to avoid using try-except statements.
+If you know that a part of the code doesn't work, remove it instead of wrapping it with try-except statements.
+
+The runtime is limited to one hour. Make sure that the code can be executed within one hour.
+
 You will be given a set of performance metrics for the program.
 Your goal is to maximize the `combined_score` of the program.
 Try diverse approaches to solve the problem."""
 ).strip()
-# TODO: add obfuscate version
-# TODO: add additional notes with vars read from bash cmd (e.g., ls /home/data)
-# TODO: add more notes on lib version + hardware?
-mle_bench_task_sys_msg = mle_bench_task_sys_msg.format(task_desc=task_desc)
-print("##### SYSTEM MESSAGE #####")
-print(mle_bench_task_sys_msg)
-print("=" * 60)
-
-job_config = LocalJobConfig(eval_program_path=f"{AGENT_DIR}/evaluate.py")
-db_config = DatabaseConfig(
-    db_path="evolution_db.sqlite",
-    num_islands=2,
-    archive_size=50,
-    # Inspiration parameters
-    elite_selection_ratio=0.3,
-    num_archive_inspirations=2,
-    num_top_k_inspirations=2,
-    # Island migration parameters
-    migration_interval=10,
-    migration_rate=0.1,  # chance to migrate program to random island
-    island_elitism=True,  # Island elite is protected from migration
-    enforce_island_separation=True,
-    parent_selection_strategy="weighted",
-    parent_selection_lambda=10.0,
-)
-evo_config = EvolutionConfig(
-    task_sys_msg=mle_bench_task_sys_msg,
-    patch_types=["diff", "full", "cross"],
-    patch_type_probs=[0.6, 0.3, 0.1],
-    num_generations=100,
-    max_parallel_jobs=1,
-    max_patch_resamples=3,
-    max_patch_attempts=3,
-    job_type="local",
-    language="python",
-    llm_models=[
-        # "gemini-2.5-pro",
-        "gemini-2.5-flash",
-        # "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", # got `proxies` error
-        "o4-mini",
-        "gpt-5-mini",
-        # "gpt-5",
-    ],
-    llm_kwargs=dict(
-        temperatures=[0.0, 0.5, 1.0],
-        max_tokens=32768,
-    ),
-    meta_rec_interval=5,
-    meta_llm_models=["gpt-5-mini"],
-    meta_llm_kwargs=dict(
-        temperatures=[0.0],
-        max_tokens=32768,
-    ),
-    init_program_path=f"{AGENT_DIR}/initial.py",
-    results_dir=f"{AGENT_DIR}/results_mle_bench",
-    max_novelty_attempts=3,
-    use_text_feedback=False,
-    llm_dynamic_selection="ucb1",
-    llm_dynamic_selection_kwargs=dict(exploration_coef=1.0),
-)
 
 
-# check file exist
-# print(os.listdir("/home/"))
-# print(os.listdir("/home/data"))
-# print(os.path.isfile("/home/instructions.txt"))
-# intx = open("/home/instructions.txt").read()
-# print("##### INSTRUCTION #####")
-# print(intx)
-# print("=" * 60)
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the Shinka evolutionary agent for MLE-Bench."
+    )
+    parser.add_argument(
+        "--num_generations", type=int, default=100, help="Number of generations to run."
+    )
+
+    return parser.parse_args()
 
 
-print("Running shinka agent...")
-print(f"EVO CONFIG: {evo_config}")
-print(f"JOB CONFIG: {job_config}")
-print(f"DB CONFIG: {db_config}")
+def main(args: argparse.Namespace) -> None:
+    debug = os.environ.get("DEBUG", False)
+    if debug:
+        print("Debug mode enabled for Shinka evolution runner.")
 
-# Run evolution with defaults
-runner = EvolutionRunner(
-    evo_config=evo_config,
-    job_config=job_config,
-    db_config=db_config,
-)
-runner.run()
+    agent_dir = os.environ.get("AGENT_DIR")
+    data_dir = os.environ.get("DATA_DIR")
+
+    if not agent_dir or not data_dir:
+        raise EnvironmentError(
+            "Environment variables `AGENT_DIR` and `DATA_DIR` must be set."
+        )
+
+    description_file = Path(data_dir) / "description.md"
+    task_desc = description_file.read_text()
+
+    # TODO: add additional notes with vars read from bash cmd (e.g., ls /home/data)
+    mle_bench_task_sys_msg = TASK_SYS_MSG_TEMPLATE.format(task_desc=task_desc)
+    print("##### SYSTEM MESSAGE #####")
+    print(mle_bench_task_sys_msg)
+    print("=" * 60)
+
+    job_config = LocalJobConfig(eval_program_path=f"{agent_dir}/evaluate.py")
+    db_config = DatabaseConfig(
+        db_path="evolution_db.sqlite",
+        num_islands=2,
+        archive_size=50,
+        # Inspiration parameters
+        elite_selection_ratio=0.3,
+        num_archive_inspirations=2,
+        num_top_k_inspirations=2,
+        # Island migration parameters
+        migration_interval=10,
+        migration_rate=0.1,  # chance to migrate program to random island
+        island_elitism=True,  # Island elite is protected from migration
+        enforce_island_separation=True,
+        parent_selection_strategy="weighted",
+        parent_selection_lambda=10.0,
+    )
+
+    evo_config = EvolutionConfig(
+        task_sys_msg=mle_bench_task_sys_msg,
+        patch_types=["diff", "full", "cross"],
+        patch_type_probs=[0.6, 0.3, 0.1],
+        num_generations=args.num_generations,
+        max_parallel_jobs=1,
+        max_patch_resamples=3,
+        max_patch_attempts=3,
+        job_type="local",
+        language="python",
+        llm_models=[
+            # "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            # "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", # got `proxies` error
+            "o4-mini",
+            "gpt-5-mini",
+            # "gpt-5",
+        ],
+        llm_kwargs=dict(
+            temperatures=[0.0, 0.5, 1.0],
+            max_tokens=32768,
+        ),
+        meta_rec_interval=5,
+        meta_llm_models=["gpt-5-mini"],
+        meta_llm_kwargs=dict(
+            temperatures=[0.0],
+            max_tokens=32768,
+        ),
+        init_program_path=f"{agent_dir}/initial.py",
+        results_dir=f"{agent_dir}/results_mle_bench",
+        max_novelty_attempts=3,
+        use_text_feedback=False,
+        llm_dynamic_selection="ucb1",
+        llm_dynamic_selection_kwargs=dict(exploration_coef=1.0),
+    )
+
+    if debug:
+        evo_config.num_generations = 5
+        evo_config.llm_models = ["gpt-5-mini"]
+
+    print("Running shinka agent...")
+    print(f"EVO CONFIG: {evo_config}")
+    print(f"JOB CONFIG: {job_config}")
+    print(f"DB CONFIG: {db_config}")
+
+    # Run evolution with defaults
+    runner = EvolutionRunner(
+        evo_config=evo_config,
+        job_config=job_config,
+        db_config=db_config,
+    )
+    runner.run()
+
+
+if __name__ == "__main__":
+    args = _parse_args()
+    main(args)

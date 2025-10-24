@@ -37,7 +37,7 @@ fi
 
 
 # run with timeout, and print if timeout occurs
-timeout $TIME_LIMIT_SECS python ${AGENT_DIR}/run_evo.py
+timeout $TIME_LIMIT_SECS python ${AGENT_DIR}/run_evo.py "$@"
 if [ $? -eq 124 ]; then
   echo "Timed out after $TIME_LIMIT"
 fi

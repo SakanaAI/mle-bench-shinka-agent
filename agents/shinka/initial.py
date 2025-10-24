@@ -1,12 +1,10 @@
 # EVOLVE-BLOCK-START
 import os
-import random
 from typing import Literal
-
-import pandas as pd
 
 # NOTE: DATA_DIR is read-only, please write only either to AGENT_DIR or RESULTS_DIR
 # NOTE: COPYING answer from `validation_answer` IS NOT ALLOWED AND IS CONSIDERED CHEATING
+# NOTE: The training time is limited to *one hour*.
 
 # these globals must not be changed
 DATA_DIR = os.environ.get("DATA_DIR")
@@ -16,28 +14,28 @@ RESULTS_DIR = os.environ.get("RESULTS_DIR")
 
 class Model:
     # An example model class
-    # Could be simply replaced by a sklearn or Torch model
+    # Could be simply replaced by a sklearn, Torch or Transformers model
     def __init__(self, seed: int | None = None):
         self.seed = seed
         self.prepare_data()
 
-    def predict(self, x):
-        # An example predict class
-        if isinstance(x, (pd.DataFrame, pd.Series)):
-            n = len(x)
-            # Return a Series aligned with the input index for convenience
-            return pd.Series([random.randint(0, 1) for _ in range(n)], index=x.index)
-
-        # Generic list/array-like batch (but not strings/bytes)
-        try:
-            if not isinstance(x, (str, bytes)) and len(x) > 1:
-                return [random.randint(0, 1) for _ in range(len(x))]
-        except TypeError:
-            pass
-
-        return random.randint(0, 1)
-
     def train(self, *args, **kwargs):
+        """
+        Training function
+
+        It should produce *two* machine learning models.
+        One trained exclusively on the "train" split,
+        while the other is trained on *both* "train" and "validation" splits.
+
+        The train-only model (let's name it `self.model_val`) should be used for reporting
+        the performance on the validation split (self.make_submission(split="validation")).
+
+        The other model (let's name it `self.model`) should be used for
+        submitting the final predictions (self.make_submission(split="test")).
+
+        This way we can maximize the final performance while avoiding data contamination
+        in the validation step.
+        """
         pass
 
     def make_submission(self, split: Literal["validation", "test"]):
@@ -49,7 +47,7 @@ class Model:
         """
         submission_path = f"{RESULTS_DIR}/submission_{split}.csv"
         # An example code that submits the example submission
-        # In practice, we should load the test file, make predictions, and save the predicions as the submission file
+        # In practice, we should load the test file, make predictions, and save the predictions as the submission file
         # The submission file should follow the format described in the task description.
         # The submission file should be saved at {RESULTS_DIR}/submission_{split}.csv
         #
@@ -59,14 +57,14 @@ class Model:
         if split == "test":
             # e.g., this could be something like
             # data_test = self.load_data("test")
-            # pred_test = self.predict(data_test)
+            # pred_test = self.predict_test(data_test)
             # formatted_submission_test = self.format_submission(data_test, pred_test)
             # formatted_submission_test.to_csv(submission_path, index=False)
             raise NotImplementedError("Test submission not implemented yet.")
         elif split == "validation":
             # e.g., this could be something like
             # data_val = self.load_data("validation")
-            # pred_val = self.predict(data_val)
+            # pred_val = self.predict_val(data_val)
             # formatted_submission_val = self.format_submission(data_val, pred_val)
             # formatted_submission_val.to_csv(submission_path, index=False)
             raise NotImplementedError("Validation submission not implemented yet.")
@@ -77,10 +75,10 @@ class Model:
         # e.g., `train.zip` mentioned in the description can be accessed at f"{DATA_DIR}/train.zip"
         #
         # Depending on the competition, the `train` file could be a csv or a zip or other file formats
-        # and it could contain the features (e.g., tabular tasks) or image ids (e.g., image classification task).
-        # You have to write code that handle the data for the current competition correctly.
+        # and it could contain the features (e.g., tabular tasks) or image ids (e.g., image classification tasks).
+        # You have to write code that handles the data for the current competition correctly.
         #
-        # Do a 80/20 split seeded by self.seed on the training file to get the train and validation splits
+        # Do an 80/20 split seeded by self.seed on the training file to get the train and validation splits
         # You can write the train split wherever you want, but make sure that `self.load_data` can read it
         # Write the validation split into two files: {AGENT_DIR}/validation.csv and {AGENT_DIR}/validation_answer.csv
         # The answer file should have the same format as the submission example shown in the task description.
@@ -101,16 +99,66 @@ def train_model(seed: int | None = None):
 
     The trained model will be evaluated on different data splits
 
+    This function must return a functional `model` instance.
+
     Returns:
         model: a trained machine learning model
     """
     # Example code
     model = Model(seed=seed)
-    model.train(model.load_data("train"))
+    model.train()
     return model
 
 
 # EVOLVE-BLOCK-END
+
+import signal
+import time
+from contextlib import contextmanager
+
+
+class TrainingTimeoutError(TimeoutError):
+    """Raised when `train_model` execution exceeds the allotted time."""
+
+
+@contextmanager
+def training_timeout(seconds: int):
+    """Raise ``TrainingTimeoutError`` if the wrapped block exceeds ``seconds``."""
+
+    if seconds <= 0:
+        yield
+        return
+
+    # ``signal`` is only available on Unix platforms; fall back to manual check otherwise.
+    if not hasattr(signal, "setitimer"):
+        start = time.monotonic()
+        yield
+        if time.monotonic() - start > seconds:
+            raise TrainingTimeoutError(
+                f"train_model exceeded the allowed runtime of {seconds} seconds."
+            )
+        return
+
+    def _handle_timeout(signum, frame):
+        raise TrainingTimeoutError(
+            f"train_model exceeded the allowed runtime of {seconds} seconds."
+        )
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    try:
+        previous_timer = signal.getitimer(signal.ITIMER_REAL)
+    except AttributeError:
+        previous_timer = (0.0, 0.0)
+
+    signal.signal(signal.SIGALRM, _handle_timeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer != (0.0, 0.0):
+            signal.setitimer(signal.ITIMER_REAL, *previous_timer)
 
 
 def run_mle_bench(*args, **kwargs):
@@ -118,7 +166,12 @@ def run_mle_bench(*args, **kwargs):
 
     print("Start training model...")
     try:
-        return train_model(kwargs.get("seed", None))
+        with training_timeout(3600):  # one hour
+            return train_model(kwargs.get("seed", None))
+    except TrainingTimeoutError as exc:
+        raise RuntimeError(
+            "train_model exceeded the maximum runtime of 1 hour."
+        ) from exc
     except Exception:
         raise RuntimeError(
             f"train_model failed with the following error trace: {traceback.format_exc()}"
