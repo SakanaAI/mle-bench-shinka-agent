@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
 # create conda environment and install the requirements to it
 RUN conda run -n ${CONDA_ENV_NAME} pip install -r ${AGENT_DIR}/requirements.txt && \
     conda clean -afy
+RUN conda run -n ${CONDA_ENV_NAME} pip install scikit-learn==1.1.3
 
 # put all the agent files in the expected location
 COPY . ${AGENT_DIR}

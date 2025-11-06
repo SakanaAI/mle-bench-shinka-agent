@@ -58,6 +58,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main(args: argparse.Namespace) -> None:
     debug = os.environ.get("DEBUG", False)
+    use_text_feedback = os.environ.get("USE_TEXT_FEEDBACK", False)
     if debug:
         print("Debug mode enabled for Shinka evolution runner.")
 
@@ -132,7 +133,7 @@ def main(args: argparse.Namespace) -> None:
         init_program_path=f"{AGENT_DIR}/initial.py",
         results_dir=f"{AGENT_DIR}/results_mle_bench",
         max_novelty_attempts=3,
-        use_text_feedback=False,
+        use_text_feedback=use_text_feedback,
         llm_dynamic_selection="ucb1",
         llm_dynamic_selection_kwargs=dict(exploration_coef=1.0),
     )

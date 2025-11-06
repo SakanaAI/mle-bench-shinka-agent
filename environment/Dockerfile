@@ -68,7 +68,10 @@ ENV DEBIAN_FRONTEND=
 
 # Make private directory (root) owner-only. Grading server will be added here, later in the build
 # The test set answers will be added here separately via a mounted docker volume
-RUN mkdir /private && chmod 700 /private
+# RUN mkdir /private && chmod 700 /private
+# TO BE REMOVED
+# make the private folder accessible for debugging with private metrics
+RUN mkdir /private && chmod 777 /private
 
 # Copy over relevant files
 COPY environment/grading_server.py /private/grading_server.py

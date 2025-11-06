@@ -1,7 +1,8 @@
 import argparse
 import os
+from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import pandas as pd
 
@@ -24,37 +25,39 @@ PRIVATE_DATA_DIR = "/private/data"
 # COMPETITION_ID is populated for us at container runtime
 COMPETITION_ID = os.getenv("COMPETITION_ID")
 ANS_VAL_PATH = f"{AGENT_DIR}/validation_answer.csv"
+ANS_TEST_PATH = glob(f"/private/data/{COMPETITION_ID}/prepared/private/*.csv")[0]
 
 
-def write_val_perf(val_perf):
-    open(f"{AGENT_DIR}/val_perf.txt", "w").write(str(float(val_perf)))
+def write_perf(perf, split):
+    open(f"{AGENT_DIR}/{split}_perf.txt", "w").write(str(float(perf)))
 
 
-def read_val_perf():
-    if not os.path.isfile(f"{AGENT_DIR}/val_perf.txt"):
+def read_perf(split):
+    if not os.path.isfile(f"{AGENT_DIR}/{split}_perf.txt"):
         return -10
-    content = open(f"{AGENT_DIR}/val_perf.txt", "r").read()
+    content = open(f"{AGENT_DIR}/{split}_perf.txt", "r").read()
     return float(content)
 
 
-def grade_validation(submission_val_path: str):
-    if not os.path.isfile(ANS_VAL_PATH):
-        return False, f"Validation answer file not found at: {ANS_VAL_PATH}"
-
-    submission_val_df = pd.read_csv(submission_val_path)
-    ans_val_ds = pd.read_csv(ANS_VAL_PATH)
-
+def grade(submission_path: str, split: Literal["validation", "test"]):
     competition = registry.get_competition(COMPETITION_ID)
+    ans_path = ANS_VAL_PATH if split == "validation" else ANS_TEST_PATH
+    if not os.path.isfile(ans_path):
+        return False, f"Answer file not found at: {ans_path}"
+
+    submission_df = pd.read_csv(submission_path)
+    ans_ds = pd.read_csv(ans_path)
+
     try:
-        val_perf = competition.grader.grade_fn(submission_val_df, ans_val_ds)
+        perf = competition.grader.grade_fn(submission_df, ans_ds)
     except Exception as e:
         return False, f"The following error occured in the grading function: {str(e)}"
 
     if IS_LOWER_BETTER[COMPETITION_ID]:
-        val_perf *= -1
+        perf *= -1
 
-    write_val_perf(val_perf)
-    return True, val_perf
+    write_perf(perf, split)
+    return True, perf
 
 
 # -------------------------------
@@ -83,23 +86,22 @@ def _validate_model(model) -> Tuple[bool, Optional[str]]:
     if not hasattr(model, "make_submission"):
         return False, "train_model result has no make_submission(...) method"
 
-    print("Validating submission (validation split)")
-    is_passed, msg = validate_submission(model, "validation")
-    if not is_passed:
-        return is_passed, msg
-    submission_val_path = msg
-
-    print("Validating submission (test split)")
-    is_passed, msg = validate_submission(model, "test")
-    if not is_passed:
-        return is_passed, msg
-
-    print("Grading validation submission...")
-    is_passed, msg = grade_validation(submission_val_path)
-    if not is_passed:
-        return is_passed, msg
+    for split in ["validation", "test"]:
+        print("Validating submission (validation split)")
+        is_passed, msg = validate_submission(model, split)
+        if not is_passed:
+            return is_passed, msg
+        submission_path = msg
+        print(f"Grading {split} submission...")
+        is_passed, msg = grade(submission_path, split)
+        if not is_passed:
+            return is_passed, msg
 
     return True, "train_model returns a functional model instance"
+
+
+def generate_text_feedback(code: str):
+    pass
 
 
 # -------------------------------
@@ -108,7 +110,7 @@ def _validate_model(model) -> Tuple[bool, Optional[str]]:
 
 
 def _aggregate_and_write_submission(
-    results: List[Any], results_dir: str
+    results: List[Any], use_text_feedback: bool, results_dir: str
 ) -> Dict[str, Any]:
     """
     Build a submission matching the sample_submission schema if available,
@@ -116,11 +118,16 @@ def _aggregate_and_write_submission(
     """
     print("Aggregating metrics...")
     model = results[0]
+    text_feedback = ""
+    if use_text_feedback:
+        # TODO: add llm judge here
+        text_feedback = generate_text_feedback(...)
 
     metrics: Dict[str, Any] = {
-        "combined_score": float(read_val_perf()),
+        "combined_score": float(read_perf("validation")),
         "public": {},
-        "private": {},
+        "private": {"test_perf": float(read_perf("test"))},
+        "text_feedback": text_feedback,
     }
 
     return metrics
@@ -141,14 +148,16 @@ def main(program_path: str, results_dir: str):
     print(f"Saving results to: {results_dir}")
     os.makedirs(results_dir, exist_ok=True)
     os.environ["RESULTS_DIR"] = results_dir
+    use_text_feedback = os.environ.get("USE_TEXT_FEEDBACK", False)
 
     data_dir = os.environ.get("DATA_DIR", "/home/data")
     agent_dir = os.environ.get("AGENT_DIR", "/home/agent")
 
     def _aggregator_with_context(runs: List[Any]) -> Dict[str, Any]:
-        return _aggregate_and_write_submission(runs, results_dir=results_dir)
+        return _aggregate_and_write_submission(
+            runs, use_text_feedback, results_dir=results_dir
+        )
 
-    # TODO: add time out?
     metrics, correct, error_msg = run_shinka_eval(
         program_path=program_path,
         results_dir=results_dir,

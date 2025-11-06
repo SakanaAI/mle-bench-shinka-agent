@@ -28,14 +28,16 @@ class Model:
         One trained exclusively on the "train" split,
         while the other is trained on *both* "train" and "validation" splits.
 
-        The train-only model (let's name it `self.model_val`) should be used for reporting
-        the performance on the validation split (self.make_submission(split="validation")).
+        The train-only model (let's name it `self.model["val"]`) should be used for reporting
+        the performance on the validation split (`self.make_submission(split="validation")`).
 
-        The other model (let's name it `self.model`) should be used for
+        The other model (let's name it `self.model["test"]`) should be used for
         submitting the final predictions (self.make_submission(split="test")).
 
         This way we can maximize the final performance while avoiding data contamination
         in the validation step.
+        
+        It is a good idea to handle a potential class imbalance issue.
         """
         pass
 
@@ -49,26 +51,20 @@ class Model:
         submission_path = f"{RESULTS_DIR}/submission_{split}.csv"
         # An example code that submits the example submission
         # In practice, we should load the test file, make predictions, and save the predictions as the submission file
-        # The submission file should follow the format described in the task description.
-        # The submission file should be saved at {RESULTS_DIR}/submission_{split}.csv
+        # The submission file must follow the format described in the task description.
+        # The submission file must be saved at {RESULTS_DIR}/submission_{split}.csv
         #
         # IMPORTANT: You should make sure that this function works as the model will be evaluated based on the submission file
         # Leaving the code as is will result in an error in the evaluation
-        # Cheating by copying labels from existing validation answer is not allowed
-        if split == "test":
-            # e.g., this could be something like
-            # data_test = self.load_data("test")
-            # pred_test = self.predict_test(data_test)
-            # formatted_submission_test = self.format_submission(data_test, pred_test)
-            # formatted_submission_test.to_csv(submission_path, index=False)
-            raise NotImplementedError("Test submission not implemented yet.")
-        elif split == "validation":
-            # e.g., this could be something like
-            # data_val = self.load_data("validation")
-            # pred_val = self.predict_val(data_val)
-            # formatted_submission_val = self.format_submission(data_val, pred_val)
-            # formatted_submission_val.to_csv(submission_path, index=False)
-            raise NotImplementedError("Validation submission not implemented yet.")
+        # Cheating by copying labels from existing validation answer is NOT allowed
+        #
+        # e.g., this could be something like
+        # data = self.load_data(split)
+        # pred = self.predict(data, model=split) # the model argument selects which model to use
+        # formatted_submission = self.format_submission(data, pred)
+        # formatted_submission.to_csv(submission_path, index=False)
+        pass
+
         return submission_path
 
     def prepare_data(self):
@@ -76,14 +72,15 @@ class Model:
         # e.g., `train.zip` mentioned in the description can be accessed at f"{DATA_DIR}/train.zip"
         #
         # Depending on the competition, the `train` file could be a csv or a zip or other file formats
-        # and it could contain the features (e.g., tabular tasks) or image ids (e.g., image classification tasks).
+        # and it could contain the features (e.g., tabular tasks) or image ids (e.g., image classification tasks) or something else entirely.
         # You have to write code that handles the data for the current competition correctly.
         #
         # Do an 80/20 split seeded by self.seed on the training file to get the train and validation splits
-        # It is a good idea to try to split the data such that the label classes in the validation split are uniform, which might be different from the training distribution
+        # We should try to make sure that the performance on the validation split is correlated with the unseen test split and that we can detect when the model is overfitted to the train set
+        #
         # You can write the train split wherever you want, but make sure that `self.load_data` can read it
         # Write the validation split into two files: {AGENT_DIR}/validation.csv and {AGENT_DIR}/validation_answer.csv
-        # The answer file should have the same format as the submission example shown in the task description.
+        # The answer file should have the same format as the submission example described in the task description.
         # The format typically contains some kind of id (e.g., "Id" column) and prediction (e.g., "is_positive" column).
         #
         # IMPORTANT: The exact location is important. Make sure that the files are saved exactly as specified.
@@ -92,7 +89,7 @@ class Model:
 
     def load_data(self, split: Literal["train", "validation", "test"]):
         # load the corresponding data split
-        return None
+        pass
 
 
 def train_model(seed: int | None = None):

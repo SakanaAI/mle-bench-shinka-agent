@@ -119,6 +119,10 @@ def run_in_container(
             "bind": f"/private/data/{competition.id}/prepared/private/",
             "mode": "ro",
         },
+        f"{run_dir}/agent_logs": {
+            "bind": "/home/logs",
+            "mode": "rw",
+        },
     }
 
     container = create_competition_container(
