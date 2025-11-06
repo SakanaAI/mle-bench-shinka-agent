@@ -36,7 +36,7 @@ class Model:
 
         This way we can maximize the final performance while avoiding data contamination
         in the validation step.
-        
+
         It is a good idea to handle a potential class imbalance issue.
         """
         pass
@@ -44,6 +44,9 @@ class Model:
     def make_submission(self, split: Literal["validation", "test"]):
         """
         Make a submission file for a given split.
+
+        Args:
+            split (Literal["validation", "test"]): which split to make submission for
 
         Returns:
             str: path to the submission file

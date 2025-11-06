@@ -15,6 +15,12 @@ shinka:
   env_vars:
     <<: *env_vars
   
+shinka/use_text_feedback:
+  <<: *defaults
+  env_vars:
+    <<: *env_vars
+    USE_TEXT_FEEDBACK: true
+  
 shinka/minimal:
   <<: *defaults
   kwargs:
