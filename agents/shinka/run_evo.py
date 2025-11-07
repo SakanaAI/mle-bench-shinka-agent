@@ -21,6 +21,7 @@ Now, you are participating in a Kaggle competition. In order to win this competi
 <problem_statement>
 
 {task_desc}
+
 <end_of_problem_statement>
 
 ---

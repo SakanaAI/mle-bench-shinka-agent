@@ -3,18 +3,23 @@ from functools import partial
 import os
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+import traceback
+from typing import Any, Literal, Optional
 
 import pandas as pd
 import yaml
 
 from mlebench.registry import registry
 
-from shinka.core import run_shinka_eval
+# from shinka.core import run_shinka_eval
+# from shinka.edit import redact_immutable
 
+from shinka_wrap_eval import run_shinka_eval
+from rubric_judge import KaggleRubricJudge
 
 # we cant access the leaderboard from inside the docker
 # we manually checked and add each competition here
+RUBRIC_PENALTY = -10
 IS_LOWER_BETTER = {
     "spaceship-titanic": False,
     "spooky-author-identification": True,
@@ -23,6 +28,7 @@ IS_LOWER_BETTER = {
 }
 
 AGENT_DIR = os.environ.get("AGENT_DIR", "/home/agent")
+DATA_DIR = os.environ.get("DATA_DIR", "/home/data")
 PRIVATE_DATA_DIR = "/private/data"
 # COMPETITION_ID is populated for us at container runtime
 COMPETITION_ID = os.getenv("COMPETITION_ID")
@@ -32,14 +38,16 @@ ANS_TEST_PATH = glob(f"/private/data/{COMPETITION_ID}/prepared/private/*.csv")[0
 
 
 def write_perf(perf, results_dir: str, split: str):
-    open(f"{results_dir}/{split}_perf.txt", "w").write(str(float(perf)))
+    open(f"{results_dir}/{split}_perf.txt", "a").write(str(float(perf)) + "\n")
 
 
 def read_perf(results_dir: str, split: str):
     if not os.path.isfile(f"{results_dir}/{split}_perf.txt"):
         return -10
-    content = open(f"{results_dir}/{split}_perf.txt", "r").read()
-    return float(content)
+    content = open(f"{results_dir}/{split}_perf.txt", "r").readlines()
+    perfs = [float(line.strip()) for line in content if line.strip()]
+    avg_perf = sum(perfs) / len(perfs)
+    return avg_perf
 
 
 def grade(submission_path: str, results_dir: str, split: Literal["validation", "test"]):
@@ -71,17 +79,17 @@ def grade(submission_path: str, results_dir: str, split: Literal["validation", "
 def validate_submission(model, split: str):
     try:
         submission_val_path = model.make_submission(split)
-    except Exception as e:
+    except Exception:
         return (
             False,
-            f"Calling `model.make_submission('{split}')` causes the following error: {str(e)}",
+            f"Calling `model.make_submission('{split}')` causes the following error: {traceback.format_exc()}",
         )
     if not os.path.isfile(submission_val_path):
         return False, f"Submission file not found at: {submission_val_path}"
     return True, submission_val_path
 
 
-def _validate_model(model, results_dir: str) -> Tuple[bool, Optional[str]]:
+def _validate_model(model, results_dir: str) -> tuple[bool, Optional[str]]:
     """Basic validation: the run result should be a model-like object."""
     print("Validating trained model...")
     if model is None:
@@ -103,11 +111,71 @@ def _validate_model(model, results_dir: str) -> Tuple[bool, Optional[str]]:
     return True, "train_model returns a functional model instance"
 
 
-def generate_text_feedback(code: str, rubrics: list[str]):
-    raise NotImplementedError
-    # TODO: manage llm calls here
+def generate_text_feedback(task_description: str, code: str, rubrics: list[str]):
+    judge = KaggleRubricJudge(
+        model_name="gpt-5-mini", temperature=0.0, max_tokens=2**13
+    )
+    feedback_df, n_passes = judge.judge_all_rubrics(task_description, code, rubrics)
+    print(
+        f"Rubrics evaluation completed. Pass {n_passes} out of {len(rubrics)} rubrics."
+    )
+    print("\nRubrics Results:")
+    if hasattr(feedback_df, "iterrows"):
+        for _, row in feedback_df.iterrows():
+            status = "✓ PASS" if row["Pass"] else "✗ FAIL"
+            print(f"  {status}: {row['Rubric'][:60]}...")
+
+        return n_passes, feedback_df.to_dict("records")
+    else:
+        print("  Warning: Unexpected results format")
+        return n_passes, {}
+
+
+def construct_textual_feedback_from_rubrics(
+    rubrics: list[dict[str, Any]],
+) -> str:
+    """Construct textual feedback from rubrics.
+
+    Expects each rubric dict to possibly contain the keys:
+    - "Pass": bool
+    - "Step": str
+    - "Rubric": str (description of rubric)
+    - "Thoughts": str
+    - "Improvements": str
+
+    Falls back gracefully if some keys are missing.
+    """
+    if not rubrics:
+        return ""
+
+    feedback_blocks: list[str] = []
     for rubric in rubrics:
-        llm_judge(code, rubric)
+        try:
+            # Only include entries that did NOT pass
+            passed_raw = rubric.get("Pass", False)
+            passed = passed_raw is True
+            if passed:
+                continue
+            status = "PASS" if passed else "FAIL"
+            rubric_desc = rubric.get("Rubric")
+            thoughts = rubric.get("Thoughts")
+            improvements = rubric.get("Improvements")
+            # TODO: improve this format
+            lines: list[str] = []
+            if rubric_desc:
+                lines.append(f"Rubric: {rubric_desc}")
+                lines.append(f"Status: {status}")
+            if thoughts:
+                lines.append(f"Thoughts: {thoughts}")
+            if improvements:
+                lines.append(f"Improvements: {improvements}")
+
+            feedback_blocks.append("\n".join(lines))
+        except Exception:
+            # Best-effort fallback representation
+            feedback_blocks.append(str(rubric))
+
+    return "\n\n".join(feedback_blocks)
 
 
 def extract_code_proposal(path: str):
@@ -126,6 +194,9 @@ def extract_code_proposal(path: str):
 
     block = content[start_idx:end_idx]
     return block.strip()
+    # content = open(path).read()
+    # code = redact_immutable(content, no_state=True)
+    # return code.strip()
 
 
 # -------------------------------
@@ -134,42 +205,53 @@ def extract_code_proposal(path: str):
 
 
 def _aggregate_and_write_submission(
-    results: List[Any],
+    results: list[Any],
     use_text_feedback: bool,
     program_path: str,
     results_dir: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build a submission matching the sample_submission schema if available,
     and compute simple local metrics if a validation split exists.
     """
-    print("Aggregating metrics...")
-    assert len(results) == 1
-    model = results[0]
+    print(f"Aggregating metrics from {len(results)} run(s).")
+    # assert len(results) == 1
+    # model = results[0]
     text_feedback = ""
     if use_text_feedback:
+        # one text feedback regardless of the number of seeds
         print("Generating text feedback from rubrics")
         try:
             code = extract_code_proposal(program_path)
-            print(f"{code=}")
             with open(f"{AGENT_DIR}/llm_judge_rubrics.yaml") as f:
                 rubrics = yaml.safe_load(f)["rubrics"]
-            print(f"{rubrics=}")
-            text_feedback = generate_text_feedback(code, rubrics)
+            description_file = Path(DATA_DIR) / "description.md"
+            task_description = description_file.read_text()
+            n_passes, feedbacks = generate_text_feedback(
+                task_description, code, rubrics
+            )
+            # TODO: can we forward the error message to the shinka agent?
+            # useful when the agent uses wrong or outdated arguments
+            text_feedback = construct_textual_feedback_from_rubrics(feedbacks)
         except Exception as e:
-            raise RuntimeError(
-                f"Error during text feedback generation: {str(e)}"
-            ) from e
-            text_feedback = ""
+            raise RuntimeError(f"Error during llm rubric judge: {str(e)}") from e
 
     val_perf = float(read_perf(results_dir, "validation"))
     test_perf = float(read_perf(results_dir, "test"))
-    metrics: Dict[str, Any] = {
-        "combined_score": val_perf,
-        "public": {},
+    pass_ratio = n_passes / len(rubrics)
+    rubric_penalty = (1 - pass_ratio) * RUBRIC_PENALTY
+    metrics: dict[str, Any] = {
+        "combined_score": val_perf + rubric_penalty,
+        "public": {
+            "validation_performance": val_perf,
+            "rubric_score": f"Pass {n_passes} out of {len(rubrics)}",
+            "rubric_penalty": rubric_penalty,
+        },
         "private": {
-            "test_perf": test_perf,
+            "test_perf": test_perf,  # TO BE REMOVED (FOR DEBUGGING)
             "test_train_perf_diff": test_perf - val_perf,
+            "detailed_feedbacks": str([str(fb) for fb in feedbacks]),
+            "n_passes_rubric": int(n_passes),
         },
         "text_feedback": text_feedback,
     }
@@ -182,7 +264,7 @@ def _aggregate_and_write_submission(
 # -------------------------------
 
 
-def _get_mle_bench_kwargs(run_index: int) -> Dict[str, Any]:
+def _get_mle_bench_kwargs(run_index: int) -> dict[str, Any]:
     # Pass a seed by default; target code may optionally use it
     return {"seed": run_index + 1}
 
@@ -194,7 +276,7 @@ def main(program_path: str, results_dir: str):
     os.environ["RESULTS_DIR"] = results_dir
     use_text_feedback = os.environ.get("USE_TEXT_FEEDBACK", False)
 
-    def _aggregator_with_context(runs: List[Any]) -> Dict[str, Any]:
+    def _aggregator_with_context(runs: list[Any]) -> dict[str, Any]:
         return _aggregate_and_write_submission(
             runs, use_text_feedback, program_path, results_dir
         )
@@ -207,6 +289,9 @@ def main(program_path: str, results_dir: str):
         get_experiment_kwargs=_get_mle_bench_kwargs,
         validate_fn=partial(_validate_model, results_dir=results_dir),
         aggregate_metrics_fn=_aggregator_with_context,
+        default_metrics_on_error={
+            "combined_score": -10,
+        },
     )
 
     if correct:
