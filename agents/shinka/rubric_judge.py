@@ -55,6 +55,8 @@ In <JSON>, provide the assessment in JSON format with the following fields:
 - "Thoughts" (str): Your thoughts on the implementation and the rubric.
 - "Improvements" (str): Suggestions for improvements to the implementation. Use only when the implementation does not pass the rubric.
 
+The implementation should not fail the rubric just because of missing bells and whistles.
+Focus on the core algorithm and logical flow.
 Be concise and objective.
 """
 
@@ -148,7 +150,7 @@ def retry(
                         # Compute exponential backoff with optional jitter
                         sleep_for = min(max_delay, delay)
                         if jitter:
-                            sleep_for = random.uniform(0, sleep_for)
+                            sleep_for += random.uniform(0, 1)
                         print(
                             f"{message} Next retry in {sleep_for:.2f}s (result-triggered)"
                         )
@@ -205,8 +207,8 @@ class KaggleRubricJudge:
             result = self.llm_client.query(
                 msg=formatted_prompt, system_msg=RUBRIC_SYSTEM_PROMPT
             )
-        except Exception:
-            return None
+        except Exception as e:
+            raise RuntimeError(f"LLM query failed: {str(e)}") from e
 
         if result is None:
             # If query failed, return False as a safe default
@@ -233,7 +235,7 @@ class KaggleRubricJudge:
         task_description: str,
         code: str,
         rubric: str,
-        max_retries: int = 3,
+        max_retries: int = 5,
     ) -> dict:
         """Judge whether the code implements the rubric.
 

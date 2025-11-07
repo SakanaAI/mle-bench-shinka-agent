@@ -3,4 +3,3 @@ rubrics:
 - Is there possible data leakage or contamination in the implementation?
 - Does the implementation contain proper spliting of training between validation data and prevent data leakage?
 - Does the implementation standardize preprocessing in a pipeline and avoid target-aware transforms?
-- Does the implementation balance under/overfitting?
