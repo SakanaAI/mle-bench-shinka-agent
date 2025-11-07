@@ -123,13 +123,13 @@ def main(args: argparse.Namespace) -> None:
         ],
         llm_kwargs=dict(
             temperatures=[0.0, 0.5, 1.0],
-            max_tokens=32768,
+            max_tokens=2**16, # 64k
         ),
         meta_rec_interval=5,
         meta_llm_models=["gpt-5-mini"],
         meta_llm_kwargs=dict(
             temperatures=[0.0],
-            max_tokens=32768,
+            max_tokens=2**16, # 64k
         ),
         init_program_path=f"{AGENT_DIR}/initial.py",
         results_dir=f"{AGENT_DIR}/results_mle_bench",

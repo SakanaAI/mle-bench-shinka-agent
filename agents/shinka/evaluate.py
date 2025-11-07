@@ -113,7 +113,7 @@ def _validate_model(model, results_dir: str) -> tuple[bool, Optional[str]]:
 
 def generate_text_feedback(task_description: str, code: str, rubrics: list[str]):
     judge = KaggleRubricJudge(
-        model_name="gpt-5-mini", temperature=0.0, max_tokens=2**13
+        model_name="gpt-5-mini", temperature=0.0, max_tokens=2**16
     )
     feedback_df, n_passes = judge.judge_all_rubrics(task_description, code, rubrics)
     print(
@@ -232,6 +232,8 @@ def _aggregate_and_write_submission(
             )
             # TODO: can we forward the error message to the shinka agent?
             # useful when the agent uses wrong or outdated arguments
+            # TODO: give total runtime feedback so that shinka knows if it can
+            # utilize more time or reduce complexity if training takes too short/long
             text_feedback = construct_textual_feedback_from_rubrics(feedbacks)
         except Exception as e:
             raise RuntimeError(f"Error during llm rubric judge: {str(e)}") from e
