@@ -1,5 +1,5 @@
 rubrics:
 - Are there any serious bugs in the implementation? Ignore non-critical details, e.g., edge cases that are unlikely to happen. Focus on logical flaws and possible data leakage.
 - Is there possible data leakage or contamination in the implementation?
-- Does the implementation contain proper spliting of training between validation data and prevent data leakage?
+- Does the implementation contain proper splitting of training between validation data and prevent data leakage?
 - Does the implementation standardize preprocessing in a pipeline and avoid target-aware transforms?

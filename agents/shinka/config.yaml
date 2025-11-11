@@ -20,6 +20,13 @@ shinka/use_text_feedback:
   env_vars:
     <<: *env_vars
     USE_TEXT_FEEDBACK: true
+
+shinka/use_text_feedback_premium_models:
+  <<: *defaults
+  env_vars:
+    <<: *env_vars
+    USE_TEXT_FEEDBACK: true
+    USE_PREMIUM_MODELS: true
   
 shinka/minimal:
   <<: *defaults

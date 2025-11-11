@@ -10,9 +10,7 @@ export AGENT_DIR=/home/agent
 docker build --platform=linux/amd64 -t shinka agents/shinka/ --build-arg SUBMISSION_DIR=$SUBMISSION_DIR --build-arg LOGS_DIR=$LOGS_DIR --build-arg CODE_DIR=$CODE_DIR --build-arg AGENT_DIR=$AGENT_DIR
 
 
-timestamp=$(date +"%Y%m%d_%H%M")
-competition_name="${competition%.*}"
-echo "Running competition: ${1}"
+echo "Running competition: ${2}"
 echo "-----------------------------------"
 # uv run run_agent.py --agent-id shinka --competition-set experiments/splits/spaceship-titanic.txt
-python run_agent.py --agent-id shinka --competition-set "experiments/splits/${1}.txt"
+python run_agent.py --agent-id "${1}" --competition-set "experiments/splits/${2}.txt"

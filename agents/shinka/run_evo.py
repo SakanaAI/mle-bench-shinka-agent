@@ -53,7 +53,6 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--num_generations", type=int, default=100, help="Number of generations to run."
     )
-
     return parser.parse_args()
 
 
@@ -74,7 +73,6 @@ def main(args: argparse.Namespace) -> None:
     description_file = Path(DATA_DIR) / "description.md"
     task_desc = description_file.read_text()
 
-    # TODO: add additional notes with vars read from bash cmd (e.g., ls /home/data)
     mle_bench_task_sys_msg = TASK_SYS_MSG_TEMPLATE.format(task_desc=task_desc)
     data_directory_files = f"{glob(f'{DATA_DIR}/*')=}"
     if data_directory_files:
@@ -84,6 +82,18 @@ def main(args: argparse.Namespace) -> None:
     print("##### SYSTEM MESSAGE #####")
     print(mle_bench_task_sys_msg)
     print("=" * 60)
+
+    llm_models = ["gemini-2.5-flash", "o4-mini", "gpt-5-mini"]
+
+    if os.environ.get("USE_PREMIUM_MODELS", False):
+        llm_models += [
+            # "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0", # this model doesn't work!?
+            # got error `Model bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0 not supported.`
+            "gemini-2.5-pro",
+            "gpt-5",
+        ]
+
+    print(f"Included LLMs: {llm_models}")
 
     job_config = LocalJobConfig(eval_program_path=f"{AGENT_DIR}/evaluate.py")
     db_config = DatabaseConfig(
@@ -113,23 +123,16 @@ def main(args: argparse.Namespace) -> None:
         max_patch_attempts=3,
         job_type="local",
         language="python",
-        llm_models=[
-            # "gemini-2.5-pro",
-            "gemini-2.5-flash",
-            # "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", # got `proxies` error
-            "o4-mini",
-            "gpt-5-mini",
-            # "gpt-5",
-        ],
+        llm_models=llm_models,
         llm_kwargs=dict(
             temperatures=[0.0, 0.5, 1.0],
-            max_tokens=2**16, # 64k
+            max_tokens=2**16,  # 64k
         ),
         meta_rec_interval=5,
         meta_llm_models=["gpt-5-mini"],
         meta_llm_kwargs=dict(
             temperatures=[0.0],
-            max_tokens=2**16, # 64k
+            max_tokens=2**16,  # 64k
         ),
         init_program_path=f"{AGENT_DIR}/initial.py",
         results_dir=f"{AGENT_DIR}/results_mle_bench",
